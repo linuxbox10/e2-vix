@@ -65,7 +65,7 @@ class About(Screen):
 									})
 
 	def populate(self):
-		self["lab1"] = StaticText(_("OpenVIX 5.2 Unofficial"))
+		self["lab1"] = StaticText(_("OpenVIX 5.3 Unofficial"))
 		self["lab2"] = StaticText(_("By Ten Below"))
 		model = None
 		AboutText = ""
