@@ -700,8 +700,6 @@ class AdapterSetup(Screen, ConfigListScreen, HelpableScreen):
 		self.secondaryDNS = NoSave(ConfigIP(default=nameserver[1]))
 
 	def createSetup(self):
-		if SystemInfo["WakeOnLAN"]:
-			self.wolstartvalue = config.network.wol.value
 		self.list = []
 		self.InterfaceEntry = getConfigListEntry(_("Use interface"), self.activateInterfaceEntry)
 
@@ -716,8 +714,6 @@ class AdapterSetup(Screen, ConfigListScreen, HelpableScreen):
 				self.list.append(self.gatewayEntry)
 				if self.hasGatewayConfigEntry.value:
 					self.list.append(getConfigListEntry(_('Gateway'), self.gatewayConfigEntry))
-			if SystemInfo["WakeOnLAN"] and ((self.iface == 'eth0' and not getBoxType() == 'et10000') or (self.iface == 'eth1' and getBoxType() == 'et10000')):
-				self.list.append(getConfigListEntry(_('Enable Wake On LAN'), config.network.wol))
 
 			self.extended = None
 			self.configStrings = None
@@ -773,7 +769,7 @@ class AdapterSetup(Screen, ConfigListScreen, HelpableScreen):
 
 	def keySave(self):
 		self.hideInputHelp()
-		if self["config"].isChanged() or (SystemInfo["WakeOnLAN"] and self.wolstartvalue != config.network.wol.value):
+		if self["config"].isChanged():
 			self.session.openWithCallback(self.keySaveConfirm, MessageBox, (_("Are you sure you want to activate this network configuration?\n\n") + self.oktext ) )
 		else:
 			if self.finished_cb:
@@ -871,8 +867,6 @@ class AdapterSetup(Screen, ConfigListScreen, HelpableScreen):
 	def keyCancelConfirm(self, result):
 		if not result:
 			return
-		if SystemInfo["WakeOnLAN"]:
-			config.network.wol.setValue(self.wolstartvalue)
 		if self.oldInterfaceState is False:
 			iNetwork.deactivateInterface(self.iface,self.keyCancelCB)
 		else:
@@ -880,7 +874,7 @@ class AdapterSetup(Screen, ConfigListScreen, HelpableScreen):
 
 	def keyCancel(self):
 		self.hideInputHelp()
-		if self["config"].isChanged() or (SystemInfo["WakeOnLAN"] and self.wolstartvalue != config.network.wol.value):
+		if self["config"].isChanged():
 			self.session.openWithCallback(self.keyCancelConfirm, MessageBox, _("Really close without saving settings?"), default = False)
 		else:
 			self.close('cancel')
@@ -1156,9 +1150,9 @@ class AdapterSetupConfiguration(Screen, HelpableScreen):
 
 		if os_path.exists(resolveFilename(SCOPE_PLUGINS, "SystemPlugins/NetworkWizard/networkwizard.xml")):
 			menu.append((_("Network wizard"), "openwizard"))
-		kernel_ver = about.getKernelVersionString()
-		if kernel_ver <= "3.5.0":
-			menu.append((_("Network MAC settings"), "mac"))
+#		kernel_ver = about.getKernelVersionString()
+#		if kernel_ver <= "3.5.0":
+		menu.append((_("Network MAC settings"), "mac"))
 
 		return menu
 
@@ -2357,9 +2351,7 @@ class NetworkTelnet(NSCommon,Screen):
 		self['labstop'] = Label(_("Stopped"))
 		self['labrun'] = Label(_("Running"))
 		self['key_green'] = Label(_("Start"))
-		self['key_red'] = Label(_("Remove Service"))
 		self['key_yellow'] = Label(_("Autostart"))
-		self['key_blue'] = Label(_("Show Log"))
 		self.Console = Console()
 		self.my_telnet_active = False
 		self.my_telnet_run = False

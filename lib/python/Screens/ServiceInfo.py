@@ -5,7 +5,7 @@ from Components.Label import Label
 from Components.config import config
 from Components.Sources.StaticText import StaticText
 from ServiceReference import ServiceReference
-from enigma import eListboxPythonMultiContent, eListbox, gFont, iServiceInformation, eServiceCenter, RT_HALIGN_LEFT
+from enigma import eListboxPythonMultiContent, eListbox, gFont, iServiceInformation, eServiceCenter, RT_HALIGN_LEFT, eDVBFrontendParametersSatellite
 from Tools.Transponder import ConvertToHumanReadable, getChannelNumber
 import skin
 
@@ -217,6 +217,9 @@ class ServiceInfo(Screen):
 					aspect = self.getServiceInfoValue(iServiceInformation.sAspect)
 					aspect = aspect in ( 1, 2, 5, 6, 9, 0xA, 0xD, 0xE ) and "4:3" or "16:9"
 					resolution += " - "+aspect+""
+				gamma = ("SDR", "HDR", "HDR10", "HLG", "")[self.info.getInfo(iServiceInformation.sGamma)]
+				if gamma:
+					resolution += " - " + gamma
 			if "%3a//" in refstr and reftype not in (1,257,4098,4114):
 				fillList = [(_("Service name"), name, TYPE_TEXT),
 					(_("Videocodec, size & format"), resolution, TYPE_TEXT),
@@ -290,14 +293,17 @@ class ServiceInfo(Screen):
 			else:
 				tuner = (_("NIM & Type"), chr(ord('A') + frontendData["tuner_number"]) + " - " + frontendData["tuner_type"], TYPE_TEXT)
 			if frontendDataOrg["tuner_type"] == "DVB-S":
-				if frontendData.get("is_id", -1) > -1: # multistream
+				t2mi = lambda x: None if x == -1 else str(x)
+				if frontendData.get("is_id", eDVBFrontendParametersSatellite.No_Stream_Id_Filter) > eDVBFrontendParametersSatellite.No_Stream_Id_Filter: # multistream
 					return (tuner,
 						(_("System & Modulation"), "%s %s" % (frontendData["system"], frontendData["modulation"]), TYPE_TEXT),
 						(_("Orbital position"), "%s" % frontendData["orbital_position"], TYPE_TEXT),
 						(_("Frequency & Polarization"), "%s - %s" % (frontendData.get("frequency", 0), frontendData["polarization"]), TYPE_TEXT),
 						(_("Symbol rate & FEC"), "%s - %s" % (frontendData.get("symbol_rate", 0), frontendData["fec_inner"]), TYPE_TEXT),
-						(_("Input Stream ID"), "%s" % (frontendData.get("is_id", -1)), TYPE_TEXT),
+						(_("Input Stream ID"), "%s" % (frontendData.get("is_id", eDVBFrontendParametersSatellite.No_Stream_Id_Filter)), TYPE_TEXT),
 						(_("PLS Mode & PLS Code"), "%s - %s" % (frontendData["pls_mode"], frontendData["pls_code"]), TYPE_TEXT),
+						(_("T2MI PLP ID"), t2mi(frontendData.get("t2mi_plp_id", eDVBFrontendParametersSatellite.No_T2MI_PLP_Id)), TYPE_TEXT),
+						(_("T2MI PID"), None if frontendData.get("t2mi_plp_id", eDVBFrontendParametersSatellite.No_T2MI_PLP_Id) == eDVBFrontendParametersSatellite.No_T2MI_PLP_Id else str(frontendData.get("t2mi_pid", eDVBFrontendParametersSatellite.T2MI_Default_Pid)), TYPE_TEXT),
 						(_("Inversion, Pilot & Roll-off"), "%s - %s - %s" % (frontendData["inversion"], frontendData.get("pilot", None), str(frontendData.get("rolloff", None))), TYPE_TEXT))
 				else: # not multistream
 					return (tuner,
@@ -305,6 +311,8 @@ class ServiceInfo(Screen):
 						(_("Orbital position"), "%s" % frontendData["orbital_position"], TYPE_TEXT),
 						(_("Frequency & Polarization"), "%s - %s" % (frontendData.get("frequency", 0), frontendData["polarization"]), TYPE_TEXT),
 						(_("Symbol rate & FEC"), "%s - %s" % (frontendData.get("symbol_rate", 0), frontendData["fec_inner"]), TYPE_TEXT),
+						(_("T2MI PLP ID"), t2mi(frontendData.get("t2mi_plp_id", eDVBFrontendParametersSatellite.No_T2MI_PLP_Id)), TYPE_TEXT),
+						(_("T2MI PID"), None if frontendData.get("t2mi_plp_id", eDVBFrontendParametersSatellite.No_T2MI_PLP_Id) == eDVBFrontendParametersSatellite.No_T2MI_PLP_Id else str(frontendData.get("t2mi_pid", eDVBFrontendParametersSatellite.T2MI_Default_Pid)), TYPE_TEXT),
 						(_("Inversion, Pilot & Roll-off"), "%s - %s - %s" % (frontendData["inversion"], frontendData.get("pilot", None), str(frontendData.get("rolloff", None))), TYPE_TEXT))
 			elif frontendDataOrg["tuner_type"] == "DVB-C":
 				return (tuner,

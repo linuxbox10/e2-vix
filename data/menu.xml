@@ -24,7 +24,7 @@
 				<item level="1" entryID="autolanguage_setup"><setup id="autolanguagesetup"/></item>
 			</menu>
 			<!-- Menu / Setup / Tuners -->
-			<menu weight="2" level="0" text="Tuner config" entryID="service_searching_selection">
+			<menu weight="2" level="0" text="Tuners &amp; scanning" entryID="service_searching_selection">
 				<id val="scan"/>
 				<!-- Menu / Setup / Tuners / Settings -->
 				<item weight="1" text="Tuner setup" entryID="tuner_setup" requires="ClientModeDisabled"><screen module="Satconfig" screen="NimSelection"/></item>
@@ -244,8 +244,11 @@ self.session.open(HdmiCECSetupScreen)
 			<item text="Standby" entryID="standby"><screen module="Standby" screen="Standby"/></item>
 			<item text="Restart GUI" entryID="restart_enigma"><screen module="Standby" screen="TryQuitMainloop">3</screen></item>
 			<item text="Reboot" entryID="restart"><screen module="Standby" screen="TryQuitMainloop">2</screen></item>
-			<item text="Multiboot" entryID="multiboot" requires="canMultiBoot"><screen module="Multiboot" screen="MultiBoot">1</screen></item>
+			<item text="Multiboot Image Selector" entryID="multiboot" requires="canMultiBoot"><screen module="MultiBootSelector" screen="MultiBootSelector">1</screen></item>
+			<item text="H9SDroot" entryID="H9SDswap" requires="HasH9SD"><screen module="H9SDswap" screen="H9SDswap">1</screen></item>
 			<item text="Deep standby" requires="DeepstandbySupport" entryID="deep_standby"><screen module="Standby" screen="TryQuitMainloop">1</screen></item>
 			<item text="Shut down" requires="!DeepstandbySupport" entryID="deep_standby"><screen module="Standby" screen="TryQuitMainloop">1</screen></item>
+			<item text="Recovery mode" requires="RecoveryMode" entryID="maintenance_mode"><screen module="Standby" screen="TryQuitMainloop">16</screen></item>
+			<item text="Android mode" requires="AndroidMode" entryID="android_mode"><screen module="Standby" screen="TryQuitMainloop">12</screen></item>
 		</menu>
 </menu>

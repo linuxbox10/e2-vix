@@ -462,14 +462,32 @@ void gPixmap::blit(const gPixmap &src, const eRect &_pos, const gRegion &clip, i
 
 //	eDebug("[gPixmap] source size: %d %d", src.size().width(), src.size().height());
 
-	if (!(flag & blitScale)) /* pos' size is valid only when scaling */
-		pos = eRect(pos.topLeft(), src.size());
-	else if (pos.size() == src.size()) /* no scaling required */
-		flag &= ~blitScale;
-
 	int scale_x = FIX, scale_y = FIX;
 
-	if (flag & blitScale)
+	if (!(flag & blitScale))
+	{
+		// pos' size is ignored if left or top aligning.
+		// if its size isn't set, centre and right/bottom aligning is ignored
+		
+		if (_pos.size().isValid())
+		{
+			if (flag & blitHAlignCenter)
+				pos.setLeft(_pos.left() + (_pos.width() - src.size().width()) / 2);
+			else if (flag & blitHAlignRight)
+				pos.setLeft(_pos.right() - src.size().width());
+
+			if (flag & blitVAlignCenter)
+				pos.setTop(_pos.top() + (_pos.height() - src.size().height()) / 2);
+			else if (flag & blitVAlignBottom)
+				pos.setTop(_pos.bottom() - src.size().height());
+		}
+
+		pos.setWidth(src.size().width());
+		pos.setHeight(src.size().height());
+	}
+	else if (pos.size() == src.size()) /* no scaling required */
+		flag &= ~blitScale;
+	else // blitScale is set
 	{
 		ASSERT(src.size().width());
 		ASSERT(src.size().height());
@@ -479,16 +497,23 @@ void gPixmap::blit(const gPixmap &src, const eRect &_pos, const gRegion &clip, i
 		{
 			if (scale_x > scale_y)
 			{
-				pos = eRect(ePoint(pos.x() + (scale_x - scale_y) * pos.width() / (2 * FIX), pos.y()),
-					eSize(src.size().width() * pos.height() / src.size().height(), pos.height()));
+				// vertical is full height, adjust horizontal to be smaller
 				scale_x = scale_y;
-
+				pos.setWidth(src.size().width() * _pos.height() / src.size().height());
+				if (flag & blitHAlignCenter)
+					pos.moveBy((_pos.width() - pos.width()) / 2, 0);
+				else if (flag & blitHAlignRight)
+					pos.moveBy(_pos.width() - pos.width(), 0);
 			}
 			else
 			{
-				pos = eRect(ePoint(pos.x(), pos.y()  + (scale_y - scale_x) * pos.height() / (2 * FIX)),
-					eSize(pos.width(), src.size().height() * pos.width() / src.size().width()));
+				// horizontal is full width, adjust vertical to be smaller
 				scale_y = scale_x;
+				pos.setHeight(src.size().height() * _pos.width() / src.size().width());
+				if (flag & blitVAlignCenter)
+					pos.moveBy(0, (_pos.height() - pos.height()) / 2);
+				else if (flag & blitVAlignBottom)
+					pos.moveBy(0, _pos.height() - pos.height());
 			}
 		}
 	}
@@ -546,7 +571,9 @@ void gPixmap::blit(const gPixmap &src, const eRect &_pos, const gRegion &clip, i
 
 //		eDebug("[gPixmap] srcarea after scale: %d %d %d %d",
 //			srcarea.x(), srcarea.y(), srcarea.width(), srcarea.height());
-
+#ifdef FORCE_NO_ACCELNEVER
+		accel = false;
+#else
 		if (accel)
 		{
 			if (srcarea.surface() * src.surface->bypp < accelerationthreshold)
@@ -562,10 +589,13 @@ void gPixmap::blit(const gPixmap &src, const eRect &_pos, const gRegion &clip, i
 				/* alpha blending is requested */
 				if (gAccel::getInstance()->hasAlphaBlendingSupport())
 				{
-#ifndef FORCE_ALPHABLENDING_ACCELERATION
+#ifdef FORCE_ALPHABLENDING_ACCELERATION
 					/* Hardware alpha blending is broken on the few
 					 * boxes that support it, so only use it
 					 * when scaling */
+
+					accel = true;
+#else
 					if (flag & blitScale)
 						accel = true;
 					else if (flag & blitAlphaTest) /* Alpha test only on 8-bit */
@@ -584,6 +614,7 @@ void gPixmap::blit(const gPixmap &src, const eRect &_pos, const gRegion &clip, i
 
 #ifdef GPIXMAP_CHECK_THRESHOLD
 		accel = (surface->data_phys && src.surface->data_phys);
+#endif
 #endif
 
 #ifdef GPIXMAP_DEBUG
@@ -967,7 +998,7 @@ void gPixmap::mergePalette(const gPixmap &target)
 	delete [] surface->clut.data;
 	surface->clut.colors=target.surface->clut.colors;
 	surface->clut.data=new gRGB[surface->clut.colors];
-	memcpy(surface->clut.data, target.surface->clut.data, sizeof(gRGB)*surface->clut.colors);
+	memcpy(static_cast<void*>(surface->clut.data), target.surface->clut.data, sizeof(gRGB)*surface->clut.colors);
 
 	uint8_t *dstptr=(uint8_t*)surface->data;
 

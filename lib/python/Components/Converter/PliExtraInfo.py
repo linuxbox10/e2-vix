@@ -7,7 +7,9 @@ from Components.Element import cached
 from Components.config import config
 from Tools.Transponder import ConvertToHumanReadable, getChannelNumber
 from Tools.GetEcmInfo import GetEcmInfo
+from Tools.Hex2strColor import Hex2strColor
 from Poll import Poll
+from skin import parameters
 
 caid_data = (
 	( "0x100",  "0x1ff", "Seca",     "S",  True  ),
@@ -21,6 +23,7 @@ caid_data = (
 	("0x1700", "0x17ff", "Beta",     "B",  True  ),
 	("0x1800", "0x18ff", "Nagra",    "N",  True  ),
 	("0x2600", "0x2600", "Biss",     "Bi", False ),
+	("0x2700", "0x2710", "Dre3",     "D3", False ),
 	("0x4ae0", "0x4ae1", "Dre",      "D",  False ),
 	("0x4aee", "0x4aee", "BulCrypt", "B1", False ),
 	("0x5581", "0x5581", "BulCrypt", "B2", False )
@@ -76,6 +79,7 @@ class PliExtraInfo(Poll, Converter, object):
 			("CryptoCaidBetaAvailable",	"B",	False),
 			("CryptoCaidNagraAvailable",	"N",	False),
 			("CryptoCaidBissAvailable",	"Bi",	False),
+			("CryptoCaidDre3Available",	"D3",	False),
 			("CryptoCaidDreAvailable",	"D",	False),
 			("CryptoCaidBulCrypt1Available","B1",	False),
 			("CryptoCaidBulCrypt2Available","B2",	False),
@@ -90,6 +94,7 @@ class PliExtraInfo(Poll, Converter, object):
 			("CryptoCaidBetaSelected",	"B",	True),
 			("CryptoCaidNagraSelected",	"N",	True),
 			("CryptoCaidBissSelected",	"Bi",	True),
+			("CryptoCaidDre3Selected",	"D3",	True),
 			("CryptoCaidDreSelected",	"D",	True),
 			("CryptoCaidBulCrypt1Selected",	"B1",	True),
 			("CryptoCaidBulCrypt2Selected",	"B2",	True),
@@ -114,24 +119,25 @@ class PliExtraInfo(Poll, Converter, object):
 	def createCryptoBar(self, info):
 		res = ""
 		available_caids = info.getInfoObject(iServiceInformation.sCAIDs)
+		colors = parameters.get("PliExtraInfoColors", (0x0000FF00, 0x00FFFF00, 0x007F7F7F, 0x00FFFFFF)) # "found", "not found", "available", "default" colors
 
 		for caid_entry in caid_data:
 			if int(caid_entry[0], 16) <= int(self.current_caid, 16) <= int(caid_entry[1], 16):
-				color="\c0000??00"
+				color = Hex2strColor(colors[0]) # green
 			else:
-				color = "\c007?7?7?"
+				color = Hex2strColor(colors[2]) # grey
 				try:
 					for caid in available_caids:
 						if int(caid_entry[0], 16) <= caid <= int(caid_entry[1], 16):
-							color="\c00????00"
+							color = Hex2strColor(colors[1]) # yellow
 				except:
 					pass
 
-			if color != "\c007?7?7?" or caid_entry[4]:
+			if color != Hex2strColor(colors[2]) or caid_entry[4]:
 				if res: res += " "
 				res += color + caid_entry[3]
 
-		res += "\c00??????"
+		res += Hex2strColor(colors[3]) # white (this acts like a color "reset" for following strings
 		return res
 
 	def createCryptoSeca(self, info):
@@ -387,10 +393,11 @@ class PliExtraInfo(Poll, Converter, object):
 			f.close()
 
 		fps  = str((video_rate + 500) / 1000)
-		return str(video_width) + "x" + str(video_height) + video_pol + fps
+		gamma = ("SDR", "HDR", "HDR10", "HLG", "")[info.getInfo(iServiceInformation.sGamma)]
+		return str(video_width) + "x" + str(video_height) + video_pol + fps + addspace(gamma)
 
 	def createVideoCodec(self, info):
-		return codec_data.get(info.getInfo(iServiceInformation.sVideoType), "N/A")
+		return codec_data.get(info.getInfo(iServiceInformation.sVideoType), _("N/A"))
 
 	def createServiceRef(self, info):
 		return info.getInfoString(iServiceInformation.sServiceref)
@@ -450,8 +457,9 @@ class PliExtraInfo(Poll, Converter, object):
 		if "DVB-T" in feraw.get("tuner_type"):
 			code_rate_lp = fedata.get("code_rate_lp")
 			code_rate_hp = fedata.get("code_rate_hp")
-			if code_rate_lp and code_rate_hp:
-				return code_rate_lp + "-" + code_rate_hp
+			guard_interval = fedata.get('guard_interval')
+			if code_rate_lp and code_rate_hp and guard_interval:
+				return code_rate_lp + "-" + code_rate_hp + "-" + guard_interval
 		else:
 			fec = fedata.get("fec_inner")
 			if fec:
@@ -608,6 +616,8 @@ class PliExtraInfo(Poll, Converter, object):
 			tmp = "MIS %d" % fedata.get("is_id")
 		if fedata.get("pls_code") > 0:
 			tmp = addspace(tmp) + "%s %d" % (fedata.get("pls_mode"), fedata.get("pls_code"))
+		if fedata.get("t2mi_plp_id") > -1:
+			tmp = addspace(tmp) + "T2MI %d PID %d" % (fedata.get("t2mi_plp_id"), fedata.get("t2mi_pid"))
 		return tmp
 
 	@cached

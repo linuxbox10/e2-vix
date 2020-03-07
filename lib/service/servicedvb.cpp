@@ -475,7 +475,7 @@ RESULT eStaticServiceDVBPVRInformation::getEvent(const eServiceReference &ref, e
 {
 	if (!ref.path.empty())
 	{
-		if (ref.path.substr(0, 7) == "http://")
+		if (ref.path.find("://") != std::string::npos)
 		{
 			eServiceReference equivalentref(ref);
 			/* this might be a scrambled stream (id + 0x100), force equivalent dvb type */
@@ -930,7 +930,7 @@ RESULT eServiceFactoryDVB::play(const eServiceReference &ref, ePtr<iPlayableServ
 
 RESULT eServiceFactoryDVB::record(const eServiceReference &ref, ePtr<iRecordableService> &ptr)
 {
-	bool isstream = ref.path.substr(0, 7) == "http://";
+	bool isstream = ref.path.find("://") != std::string::npos;
 	ptr = new eDVBServiceRecord((eServiceReferenceDVB&)ref, isstream);
 	return 0;
 }
@@ -1021,7 +1021,7 @@ eDVBServicePlay::eDVBServicePlay(const eServiceReference &ref, eDVBService *serv
 	m_have_video_pid(0),
 	m_tune_state(-1),
 	m_noaudio(false),
-	m_is_stream(ref.path.substr(0, 7) == "http://"),
+	m_is_stream(ref.path.find("://") != std::string::npos),
 	m_is_pvr(!ref.path.empty() && !m_is_stream),
 	m_is_paused(0),
 	m_timeshift_enabled(0),
@@ -1736,7 +1736,7 @@ RESULT eDVBServicePlay::subServices(ePtr<iSubserviceList> &ptr)
 RESULT eDVBServicePlay::timeshift(ePtr<iTimeshiftService> &ptr)
 {
 	ptr = nullptr;
-	eDebug("[eDVBServicePlay] timeshift");
+	/* eDebug("[eDVBServicePlay] timeshift"); */
 	if (m_timeshift_enabled || !m_is_pvr)
 	{
 		if (!m_timeshift_enabled)
@@ -1939,14 +1939,14 @@ int eDVBServicePlay::getInfo(int w)
 			return aspect;
 		break;
 	}
+	case sGamma:
+		if (m_decoder) return m_decoder->getVideoGamma();
+		break;
 	case sIsCrypted:
 		if (no_program_info) return false;
 		return program.isCrypted();
 	case sIsDedicated3D:
 		if (m_dvb_service) return m_dvb_service->isDedicated3D();
-		return false;
-	case sHideVBI:
-		if (m_dvb_service) return m_dvb_service->doHideVBI();
 		return false;
 	case sCenterDVBSubs:
 		if (m_dvb_service) return m_dvb_service->doCenterDVBSubs();
@@ -1974,6 +1974,9 @@ int eDVBServicePlay::getInfo(int w)
 			apid = m_dvb_service->getCacheEntry(eDVBService::cAC3PID);
 			if (apid != -1)
 				return apid;
+			apid = m_dvb_service->getCacheEntry(eDVBService::cAC4PID);
+			if (apid != -1)
+				return apid;
 			apid = m_dvb_service->getCacheEntry(eDVBService::cDDPPID);
 			if (apid != -1)
 				return apid;
@@ -1981,6 +1984,9 @@ int eDVBServicePlay::getInfo(int w)
 			if (apid != -1)
 				return apid;
 			apid = m_dvb_service->getCacheEntry(eDVBService::cAACAPID);
+			if (apid != -1)
+				return apid;
+			apid = m_dvb_service->getCacheEntry(eDVBService::cDRAAPID);
 			if (apid != -1)
 				return apid;
 		}
@@ -2120,6 +2126,8 @@ RESULT eDVBServicePlay::getTrackInfo(struct iAudioTrackInfo &info, unsigned int 
 		info.m_description = "MPEG";
 	else if (program.audioStreams[i].type == eDVBServicePMTHandler::audioStream::atAC3)
 		info.m_description = "AC3";
+	else if (program.audioStreams[i].type == eDVBServicePMTHandler::audioStream::atAC4)
+		info.m_description = "AC4";
 	else if (program.audioStreams[i].type == eDVBServicePMTHandler::audioStream::atDDP)
 		info.m_description = "AC3+";
 	else if (program.audioStreams[i].type == eDVBServicePMTHandler::audioStream::atAAC)
@@ -2132,6 +2140,8 @@ RESULT eDVBServicePlay::getTrackInfo(struct iAudioTrackInfo &info, unsigned int 
 		info.m_description = "DTS-HD";
 	else if (program.audioStreams[i].type == eDVBServicePMTHandler::audioStream::atLPCM)
 		info.m_description = "LPCM";
+	else if (program.audioStreams[i].type == eDVBServicePMTHandler::audioStream::atDRA)
+		info.m_description = "DRA";
 	else
 		info.m_description = "???";
 
@@ -2208,7 +2218,11 @@ int eDVBServicePlay::selectAudioStream(int i)
 		int different_pid = program.videoStreams.empty() && program.audioStreams.size() == 1 && program.audioStreams[stream].rdsPid != -1;
 		if (different_pid)
 			rdsPid = program.audioStreams[stream].rdsPid;
+#if HAVE_HISILICON
+		if (different_pid && (!m_rds_decoder || m_rds_decoder->getPid() != rdsPid))
+#else 
 		if (!m_rds_decoder || m_rds_decoder->getPid() != rdsPid)
+#endif
 		{
 			m_rds_decoder = 0;
 			ePtr<iDVBDemux> data_demux;
@@ -2233,15 +2247,19 @@ int eDVBServicePlay::selectAudioStream(int i)
 	if (m_dvb_service && ((i != -1) || (program.audioStreams.size() == 1)
 		|| ((m_dvb_service->getCacheEntry(eDVBService::cMPEGAPID) == -1)
 		&& (m_dvb_service->getCacheEntry(eDVBService::cAC3PID)== -1)
+		&& (m_dvb_service->getCacheEntry(eDVBService::cAC4PID)== -1)
 		&& (m_dvb_service->getCacheEntry(eDVBService::cDDPPID)== -1)
 		&& (m_dvb_service->getCacheEntry(eDVBService::cAACHEAPID) == -1)
-		&& (m_dvb_service->getCacheEntry(eDVBService::cAACAPID) == -1))))
+		&& (m_dvb_service->getCacheEntry(eDVBService::cAACAPID) == -1)
+		&& (m_dvb_service->getCacheEntry(eDVBService::cDRAAPID) == -1))))
 	{
 		m_dvb_service->setCacheEntry(eDVBService::cMPEGAPID, apidtype == eDVBAudio::aMPEG ? apid : -1);
 		m_dvb_service->setCacheEntry(eDVBService::cAC3PID, apidtype == eDVBAudio::aAC3 ? apid : -1);
+		m_dvb_service->setCacheEntry(eDVBService::cAC4PID, apidtype == eDVBAudio::aAC4 ? apid : -1);
 		m_dvb_service->setCacheEntry(eDVBService::cDDPPID, apidtype == eDVBAudio::aDDP ? apid : -1);
 		m_dvb_service->setCacheEntry(eDVBService::cAACHEAPID, apidtype == eDVBAudio::aAACHE ? apid : -1);
 		m_dvb_service->setCacheEntry(eDVBService::cAACAPID, apidtype == eDVBAudio::aAAC ? apid : -1);
+		m_dvb_service->setCacheEntry(eDVBService::cDRAAPID, apidtype == eDVBAudio::aDRA ? apid : -1);
 	}
 
 	h.resetCachedProgram();
@@ -3477,11 +3495,12 @@ void eDVBServicePlay::checkSubtitleTiming()
 		else
 			return;
 
+		// If subtitle is overdue or within 20ms the video timing then display it.
+		// If not, pause subtitle processing until the subtitle should be shown
 		int diff = show_time - pos;
-//		eDebug("[eDVBServicePlay] Subtitle show %d page.pts=%lld pts=%lld diff=%d", type, show_time, pos, diff);
-
-		if (diff < 20*90 || diff > 1800000)
+		if (diff < 20*90)
 		{
+			//eDebug("[eDVBServicePlay] Showing subtitle with pts:%lld Video pts:%lld diff:%.03fs. Page stack size %d", show_time, pos, diff / 90000.0f, m_dvb_subtitle_pages.size());
 			if (type == TELETEXT)
 			{
 				m_subtitle_widget->setPage(page);
@@ -3492,8 +3511,10 @@ void eDVBServicePlay::checkSubtitleTiming()
 				m_subtitle_widget->setPage(dvb_page);
 				m_dvb_subtitle_pages.pop_front();
 			}
-		} else
+		}
+		else
 		{
+			//eDebug("[eDVBServicePlay] Delay early subtitle by %.03fs. Page stack size %d", diff / 90000.0f, m_dvb_subtitle_pages.size());
 			m_subtitle_sync_timer->start(diff / 90, 1);
 			break;
 		}
@@ -3507,9 +3528,14 @@ void eDVBServicePlay::newDVBSubtitlePage(const eDVBSubtitlePage &p)
 		pts_t pos = 0;
 		if (m_decoder)
 			m_decoder->getPTS(0, pos);
-		if ( abs(pos-p.m_show_time)>1800000 && (m_is_pvr || m_timeshift_enabled))
+
+		// Where subtitles are delivered out of sync with video, only treat subtitles in the past as having bad timing.
+		// Those that are delivered too early are cached for displaying at the appropriate later time
+		// Note that this can be due to buggy drivers, as well as problems with the broadcast 
+		if (pos-p.m_show_time > 1800000 && (m_is_pvr || m_timeshift_enabled))
 		{
-			eDebug("[eDVBServicePlay] Subtitle without PTS and recording");
+			// Subtitles delivered over 20 seconds too late
+			eDebug("[eDVBServicePlay] Video pts:%lld, subtitle show_time:%lld, diff:%.02fs BAD TIMING", pos, p.m_show_time, (p.m_show_time - pos) / 90000.0f);
 			int subtitledelay = eConfigManager::getConfigIntValue("config.subtitles.subtitle_noPTSrecordingdelay", 315000);
 
 			eDVBSubtitlePage tmppage;
@@ -3585,6 +3611,9 @@ void eDVBServicePlay::video_event(struct iTSMPEGDecoder::videoEvent event)
 			break;
 		case iTSMPEGDecoder::videoEvent::eventProgressiveChanged:
 			m_event((iPlayableService*)this, evVideoProgressiveChanged);
+			break;
+		case iTSMPEGDecoder::videoEvent::eventGammaChanged:
+			m_event((iPlayableService*)this, evVideoGammaChanged);
 			break;
 		default:
 			break;

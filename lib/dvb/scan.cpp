@@ -741,7 +741,7 @@ int eDVBScan::sameChannel(iDVBFrontendParameters *ch1, iDVBFrontendParameters *c
 	int diff;
 	if (ch1->calculateDifference(ch2, diff, exact))
 		return 0;
-	if (diff < 4000) // more than 4mhz difference?
+	if (diff < 2000) // more than 2mhz difference?
 		return 1;
 	return 0;
 }
@@ -1108,13 +1108,14 @@ void eDVBScan::channelDone()
 			if( m_chid_current )
 				tsonid = ( m_chid_current.transport_stream_id.get() << 16 )
 					| m_chid_current.original_network_id.get();
-			service->m_service_name = convertDVBUTF8(sname,-1,tsonid,0);
+			service->m_service_name = strip_non_graph(convertDVBUTF8(sname,-1,tsonid,0));
 			service->genSortName();
-			service->m_provider_name = convertDVBUTF8(pname,-1,tsonid,0);
+			service->m_provider_name = strip_non_graph(convertDVBUTF8(pname,-1,tsonid,0));
 		}
 
 		if (!(m_flags & scanOnlyFree) || !m_pmt_in_progress->second.scrambled) {
 			SCAN_eDebug("[eDVBScan] add not scrambled!");
+			m_new_servicerefs.push_back(ref);
 			std::pair<std::map<eServiceReferenceDVB, ePtr<eDVBService> >::iterator, bool> i =
 				m_new_services.insert(std::pair<eServiceReferenceDVB, ePtr<eDVBService> >(ref, service));
 			if (i.second)
@@ -1186,6 +1187,7 @@ void eDVBScan::start(const eSmartPtrList<iDVBFrontendParameters> &known_transpon
 	m_new_channels.clear();
 	m_tuner_data.clear();
 	m_new_services.clear();
+	m_new_servicerefs.clear();
 	m_last_service = m_new_services.end();
 
 	if (m_flags & scanBlindSearch)
@@ -1448,10 +1450,10 @@ void eDVBScan::insertInto(iDVBChannelList *db, bool backgroundscanresult)
 		{
 			bouquet->m_bouquet_name = "Last Scanned";
 
-			for (std::map<eServiceReferenceDVB, ePtr<eDVBService> >::const_iterator
-				service(m_new_services.begin()); service != m_new_services.end(); ++service)
+			for (std::vector<eServiceReferenceDVB>::const_iterator
+				service(m_new_servicerefs.begin()); service != m_new_servicerefs.end(); ++service)
 			{
-				bouquet->m_services.push_back(service->first);
+				bouquet->m_services.push_back(*service);
 			}
 			bouquet->flushChanges();
 			eDVBDB::getInstance()->renumberBouquet();
@@ -1514,6 +1516,7 @@ RESULT eDVBScan::processSDT(eDVBNamespace dvbnamespace, const ServiceDescription
 					{
 					/* DISH/BEV servicetypes: */
 					case 128:
+					case 131: /*Sky UK OpenTV EPG channel */ 
 					case 133:
 					case 137:
 					case 144:
@@ -1532,10 +1535,10 @@ RESULT eDVBScan::processSDT(eDVBNamespace dvbnamespace, const ServiceDescription
 
 					ref.setServiceType(servicetype);
 					int tsonid=(sdt.getTransportStreamId() << 16) | sdt.getOriginalNetworkId();
-					service->m_service_name = convertDVBUTF8(d.getServiceName(),-1,tsonid,0);
+					service->m_service_name = strip_non_graph(convertDVBUTF8(d.getServiceName(),-1,tsonid,0));
 					service->genSortName();
 
-					service->m_provider_name = convertDVBUTF8(d.getServiceProviderName(),-1,tsonid,0);
+					service->m_provider_name = strip_non_graph(convertDVBUTF8(d.getServiceProviderName(),-1,tsonid,0));
 					SCAN_eDebug("[eDVBScan]   name '%s', provider_name '%s'", service->m_service_name.c_str(), service->m_provider_name.c_str());
 					break;
 				}
@@ -1561,6 +1564,7 @@ RESULT eDVBScan::processSDT(eDVBNamespace dvbnamespace, const ServiceDescription
 			if (is_crypted and !service->m_ca.size())
 				service->m_ca.push_front(0);
 
+			m_new_servicerefs.push_back(ref);
 			std::pair<std::map<eServiceReferenceDVB, ePtr<eDVBService> >::iterator, bool> i =
 				m_new_services.insert(std::pair<eServiceReferenceDVB, ePtr<eDVBService> >(ref, service));
 
@@ -1668,6 +1672,7 @@ RESULT eDVBScan::processVCT(eDVBNamespace dvbnamespace, const VirtualChannelTabl
 			if (is_crypted and !service->m_ca.size())
 				service->m_ca.push_front(0);
 
+			m_new_servicerefs.push_back(ref);
 			std::pair<std::map<eServiceReferenceDVB, ePtr<eDVBService> >::iterator, bool> i =
 				m_new_services.insert(std::pair<eServiceReferenceDVB, ePtr<eDVBService> >(ref, service));
 
